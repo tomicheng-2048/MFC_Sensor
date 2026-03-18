@@ -64,9 +64,9 @@
 
     <script>
         // 1. 模擬數據基準值與圖表設置
-        let baseVoltage = 0.55; 
-        let baseCurrent = 12.5; 
-        let baseGlucose = 5.2; 
+        let baseVoltage = 0.20; 
+        let baseCurrent = 20; 
+        let baseGlucose = 10; 
         const MAX_POINTS = 30; // 圖表最多顯示 30 點
 
         // 2. 初始化圖表 (Plotly)
@@ -82,9 +82,9 @@
         };
 
         const layout = {
-            title: { text: '電流隨時間變化趨勢圖 (mA)', font: { size: 16 } },
+            title: { text: '電流隨時間變化趨勢圖 (μA)', font: { size: 16 } },
             xaxis: { title: '時間 (Time)', showgrid: false },
-            yaxis: { title: '電流 (mA)', gridcolor: '#eee', zerolinecolor: '#eee' },
+            yaxis: { title: '電流 (μA)', gridcolor: '#eee', zerolinecolor: '#eee' },
             margin: { l: 50, r: 20, t: 50, b: 50 },
             hovermode: 'closest',
             paper_bgcolor: 'rgba(0,0,0,0)', // 背景透明
@@ -97,11 +97,11 @@
         // 3. 數據模擬函式 (與原本一致)
         function simulateData() {
             // 電壓與電流：產生小幅度、快速的隨機跳動 (+- 2%)
-            let v = baseVoltage + (Math.random() - 0.5) * 0.02;
+            let v = baseVoltage + (Math.random() - 0.5) * 0.01;
             let c = baseCurrent + (Math.random() - 0.5) * 0.5;
 
             // 糖濃度：穩定緩慢下降 (-0.1% / 秒)
-            baseGlucose -= 0.001; 
+            baseGlucose -= 0.0001; 
             if (baseGlucose < 0) baseGlucose = 5.2; 
 
             // 顯示在網頁數據方塊上
