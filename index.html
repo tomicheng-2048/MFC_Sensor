@@ -3,147 +3,90 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MFC 燃料電池監控面板 (圖表)</title>
-    <script src="https://cdn.plot.ly/plotly-2.24.1.min.js" charset="utf-8"></script>
-    
+    <title>MFC 燃料電池監控面板</title>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; }
-        .container { background: white; padding: 20px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; width: 100%; max-width: 900px; }
-        h1 { color: #333; margin-bottom: 20px; border-bottom: 2px solid #eee; padding-bottom: 10px; font-size: 1.8em; }
+        .container { background: white; padding: 30px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; width: 100%; max-width: 600px; }
+        h1 { color: #333; margin-bottom: 30px; border-bottom: 2px solid #eee; padding-bottom: 15px; font-size: 1.8em; }
         
         /* 數據方塊區 */
-        .data-wrapper { display: flex; justify-content: space-around; margin-bottom: 20px; gap: 15px; flex-wrap: wrap; }
-        .data-block { flex: 1; min-width: 150px; padding: 15px; border-radius: 10px; background: #fafafa; border-left: 5px solid #ccc; box-shadow: inset 0 2px 5px rgba(0,0,0,0.05); }
-        .label { font-size: 0.9em; color: #666; font-weight: 500; display: block; margin-bottom: 5px; }
-        .value { font-size: 1.8em; font-weight: bold; font-family: 'Courier New', Courier, monospace; }
+        .data-wrapper { display: flex; flex-direction: column; gap: 20px; }
+        .data-block { padding: 20px; border-radius: 12px; background: #fafafa; border-left: 6px solid #ccc; box-shadow: inset 0 2px 5px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; }
+        .label { font-size: 1.1em; color: #666; font-weight: 500; }
+        .value { font-size: 2em; font-weight: bold; font-family: 'Courier New', Courier, monospace; }
         
-        /* 圖表區 */
-        #current-chart { width: 100%; height: 400px; margin-top: 20px; border: 1px solid #eee; border-radius: 10px; }
+        /* 顏色區分 */
+        .v-block { border-left-color: #4caf50; } 
+        .c-block { border-left-color: #2196f3; } 
+        .n-block { border-left-color: #9c27b0; } /* 氮濃度改用紫色 */
         
-        /* 時間區 */
-        .time-wrapper { margin-top: 15px; display: flex; justify-content: space-between; align-items: center; color: #888; font-size: 0.85em; }
-        
-        /* 顏色與動態燈 */
-        .v-block { border-left-color: #4caf50; } /* 綠色 */
-        .c-block { border-left-color: #2196f3; } /* 藍色 */
-        .g-block { border-left-color: #ff9800; background-color: #fffde7; } /* 橘色 */
         .v-val { color: #4caf50; }
         .c-val { color: #2196f3; }
-        .g-val { color: #ff9800; }
+        .n-val { color: #9c27b0; }
         
-        .status-dot { width: 10px; height: 10px; background-color: #bbb; border-radius: 50%; display: inline-block; margin-right: 5px; transition: background-color 0.1s; }
+        /* 狀態資訊 */
+        .info-footer { margin-top: 25px; display: flex; justify-content: space-between; color: #888; font-size: 0.9em; }
+        .status-dot { width: 10px; height: 10px; background-color: #bbb; border-radius: 50%; display: inline-block; margin-right: 5px; }
         .status-active .status-dot { background-color: #2196f3; box-shadow: 0 0 5px #2196f3; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>MFC 燃料電池實時監控 (圖表)</h1>
+        <h1>MFC 燃料電池監控面板</h1>
         
         <div class="data-wrapper">
             <div class="data-block v-block">
                 <span class="label">電壓 (Voltage)</span>
-                <span class="value v-val" id="v-val">0.000 V</span>
+                <span class="value v-val" id="v-val">6.50 mV</span>
             </div>
+            
             <div class="data-block c-block">
                 <span class="label">電流 (Current)</span>
-                <span class="value c-val" id="c-val">0.00 mA</span>
+                <span class="value c-val" id="c-val">17.30 mA</span>
             </div>
-            <div class="data-block g-block">
-                <span class="label">糖濃度 (Glucose)</span>
-                <span class="value g-val" id="g-val">0.0 mmol/L</span>
+            
+            <div class="data-block n-block">
+                <span class="label">氮濃度 (Nitrogen)</span>
+                <span class="value n-val" id="n-val">21.4 mmol/L</span>
             </div>
         </div>
 
-        <div id="current-chart"></div>
-
-        <div class="time-wrapper">
-            <div id="status-light"><span class="status-dot"></span><span id="status-text">連線中...</span></div>
-            <div id="time">初始化中...</div>
+        <div class="info-footer">
+            <div id="status-light"><span class="status-dot"></span><span id="status-text">系統運作中</span></div>
+            <div id="time">更新中...</div>
         </div>
     </div>
 
     <script>
-        // 1. 模擬數據基準值與圖表設置
-        let baseVoltage = 0.25; 
-        let baseCurrent = 0.22; 
-        let baseGlucose = 5.8%; 
-        const MAX_POINTS = 30; // 圖表最多顯示 30 點
+        // 設定基準值
+        const targetVoltage = 6.5;
+        const targetCurrent = 17.3;
+        const targetNitrogen = 21.4;
 
-        // 2. 初始化圖表 (Plotly)
-        const trace = {
-            x: [], // 時間
-            y: [], // 電流 mA
-            mode: 'lines+markers', // 線 + 點
-            name: '電流 (Current)',
-            line: { color: '#2196f3', width: 2, shape: 'spline' }, // 藍色, 圓滑線
-            marker: { size: 6, color: '#fff', line: { color: '#2196f3', width: 2 } },
-            fill: 'tozeroy', // 填充下方區域
-            fillcolor: 'rgba(33, 150, 243, 0.1)' // 淺藍色填充
-        };
+        function updateMonitor() {
+            // 模擬微小的數據浮動 (讓畫面看起來像活的)
+            let v = targetVoltage + (Math.random() - 0.5) * 0.1;
+            let c = targetCurrent + (Math.random() - 0.5) * 0.05;
+            let n = targetNitrogen + (Math.random() - 0.5) * 0.02;
 
-        const layout = {
-            title: { text: '電流隨時間變化趨勢圖 (μA)tomi gAY NO PIYAN', font: { size: 16 } },
-            xaxis: { title: '時間 (Time)', showgrid: false },
-            yaxis: { title: '電流 (mA)', gridcolor: '#eee', zerolinecolor: '#eee' },
-            margin: { l: 50, r: 20, t: 50, b: 50 },
-            hovermode: 'closest',
-            paper_bgcolor: 'rgba(0,0,0,0)', // 背景透明
-            plot_bgcolor: 'rgba(0,0,0,0)'
-        };
-
-        Plotly.newPlot('current-chart', [trace], layout);
-
-
-        // 3. 數據模擬函式 (與原本一致)
-        function simulateData() {
-            // 電壓與電流：產生小幅度、快速的隨機跳動 (+- 2%)
-            let v = baseVoltage + (Math.random() - 0.5) * 0.01;
-            let c = baseCurrent + (Math.random() - 0.5) * 0.5;
-
-            // 糖濃度：穩定緩慢下降 (-0.1% / 秒)
-            baseGlucose -= 0.0001; 
-            if (baseGlucose < 0) baseGlucose = 5.2; 
-
-            // 顯示在網頁數據方塊上
-            document.getElementById('v-val').innerText = v.toFixed(3) + " V";
+            // 更新到網頁上
+            document.getElementById('v-val').innerText = v.toFixed(2) + " mV";
             document.getElementById('c-val').innerText = c.toFixed(2) + " mA";
-            document.getElementById('g-val').innerText = baseGlucose.toFixed(1) + " g/L";
+            document.getElementById('n-val').innerText = n.toFixed(1) + " mmol/L";
             
             // 更新時間
             let now = new Date();
             document.getElementById('time').innerText = "最後更新: " + now.toLocaleTimeString();
 
-            // 任務 D：更新圖表數據
-            updateChart(now, c);
-            
-            // 閃爍藍燈模擬連線
-            document.getElementById('status-light').classList.add('status-active');
-            setTimeout(() => document.getElementById('status-light').classList.remove('status-active'), 100);
-            document.getElementById('status-text').innerText = "數據更新中";
+            // 閃爍狀態燈
+            const statusLight = document.getElementById('status-light');
+            statusLight.classList.add('status-active');
+            setTimeout(() => statusLight.classList.remove('status-active'), 150);
         }
 
-        // 4. 更新圖表的 JavaScript 邏輯
-        function updateChart(time, current) {
-            // 添加新點
-            Plotly.extendTraces('current-chart', {
-                x: [[time]],
-                y: [[current]]
-            }, [0]);
-
-            // 滾動 X 軸 (保持 MAX_POINTS 個數據點)
-            let currentXArr = document.getElementById('current-chart').data[0].x;
-            if (currentXArr.length > MAX_POINTS) {
-                let range = [currentXArr[currentXArr.length - MAX_POINTS], currentXArr[currentXArr.length - 1]];
-                Plotly.relayout('current-chart', {
-                    'xaxis.range': range
-                });
-            }
-        }
-
-        // 5. 設定計時器 (與真實運作一致)
-        // 電流、電壓跳動頻率快 (0.5秒)，圖表也會跟著跳動
-        setInterval(simulateData, 500); 
-
+        // 每秒更新兩次數據
+        setInterval(updateMonitor, 500);
+        updateMonitor(); // 初始化執行一次
     </script>
 </body>
 </html>
