@@ -3,36 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MFC 燃料電池監控面板</title>
+    <title>MFC 燃料電池監控面板 (雙 Y 軸圖表)</title>
+    <script src="https://cdn.plot.ly/plotly-2.24.1.min.js" charset="utf-8"></script>
+    
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; }
-        .container { background: white; padding: 30px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; width: 100%; max-width: 600px; }
-        h1 { color: #333; margin-bottom: 30px; border-bottom: 2px solid #eee; padding-bottom: 15px; font-size: 1.8em; }
+        .container { background: white; padding: 25px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; width: 100%; max-width: 1000px; }
+        h1 { color: #333; margin-bottom: 25px; border-bottom: 2px solid #eee; padding-bottom: 12px; font-size: 1.8em; }
         
-        /* 數據方塊區 */
-        .data-wrapper { display: flex; flex-direction: column; gap: 20px; }
-        .data-block { padding: 20px; border-radius: 12px; background: #fafafa; border-left: 6px solid #ccc; box-shadow: inset 0 2px 5px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; }
-        .label { font-size: 1.1em; color: #666; font-weight: 500; }
-        .value { font-size: 2em; font-weight: bold; font-family: 'Courier New', Courier, monospace; }
+        /* 數據方塊區 (改為橫向排列) */
+        .data-wrapper { display: flex; justify-content: space-between; margin-bottom: 25px; gap: 15px; flex-wrap: wrap; }
+        .data-block { flex: 1; min-width: 200px; padding: 18px; border-radius: 12px; background: #fafafa; border-left: 6px solid #ccc; box-shadow: inset 0 2px 5px rgba(0,0,0,0.05); text-align: left; }
+        .label { font-size: 1em; color: #666; font-weight: 500; display: block; margin-bottom: 8px; }
+        .value { font-size: 2.2em; font-weight: bold; font-family: 'Courier New', Courier, monospace; }
         
-        /* 顏色區分 */
-        .v-block { border-left-color: #4caf50; } 
-        .c-block { border-left-color: #2196f3; } 
-        .n-block { border-left-color: #9c27b0; } /* 氮濃度改用紫色 */
+        /* 顏色與圖表區 */
+        .v-block { border-left-color: #4caf50; } /* 電壓: 綠色 */
+        .c-block { border-left-color: #2196f3; } /* 電流: 藍色 */
+        .n-block { border-left-color: #9c27b0; } /* 氮濃度: 紫色 */
         
         .v-val { color: #4caf50; }
         .c-val { color: #2196f3; }
         .n-val { color: #9c27b0; }
         
+        #monitor-chart { width: 100%; height: 450px; margin-top: 10px; border: 1px solid #eee; border-radius: 12px; }
+        
         /* 狀態資訊 */
-        .info-footer { margin-top: 25px; display: flex; justify-content: space-between; color: #888; font-size: 0.9em; }
+        .info-footer { margin-top: 20px; display: flex; justify-content: space-between; color: #888; font-size: 0.9em; }
         .status-dot { width: 10px; height: 10px; background-color: #bbb; border-radius: 50%; display: inline-block; margin-right: 5px; }
         .status-active .status-dot { background-color: #2196f3; box-shadow: 0 0 5px #2196f3; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>MFC 燃料電池監控面板</h1>
+        <h1>MFC 燃料電池即時監控面板</h1>
         
         <div class="data-wrapper">
             <div class="data-block v-block">
@@ -51,42 +55,133 @@
             </div>
         </div>
 
+        <div id="monitor-chart"></div>
+
         <div class="info-footer">
-            <div id="status-light"><span class="status-dot"></span><span id="status-text">系統運作中</span></div>
-            <div id="time">更新中...</div>
+            <div id="status-light"><span class="status-dot"></span><span id="status-text">系統連線中</span></div>
+            <div id="time">初始化中...</div>
         </div>
     </div>
 
     <script>
-        // 設定基準值
-        const targetVoltage = 6.5;
-        const targetCurrent = 17.3;
-        const targetNitrogen = 21.4;
+        // --- 1. 設定與模擬數據 ---
+        const targetVoltage = 6.5; // mV
+        const targetCurrent = 17.3; // mA
+        const targetNitrogen = 21.4; // mmol/L
+        const MAX_POINTS = 60; // 圖表保留最近 60 點 (約 30 秒)
 
+        // --- 2. 初始化圖表 (Plotly 双 Y 軸) ---
+        
+        // 電壓 Trace (綠色, 左軸)
+        const traceVoltage = {
+            x: [], 
+            y: [], 
+            mode: 'lines', // 純線
+            name: '電壓 (mV)',
+            line: { color: '#4caf50', width: 2.5, shape: 'spline' }, // 圓滑線
+            yaxis: 'y' // 使用主 Y 軸
+        };
+
+        // 電流 Trace (藍色, 右軸)
+        const traceCurrent = {
+            x: [], 
+            y: [], 
+            mode: 'lines', 
+            name: '電流 (mA)',
+            line: { color: '#2196f3', width: 2.5, shape: 'spline' },
+            yaxis: 'y2' // 使用副 Y 軸
+        };
+
+        const layout = {
+            title: { text: '電壓與電流即時變化趨勢', font: { size: 18 } },
+            margin: { l: 60, r: 60, t: 50, b: 50 },
+            hovermode: 'closest',
+            // X 軸 (時間)
+            xaxis: { 
+                title: '時間 (Time)', 
+                type: 'date',
+                showgrid: false,
+                tickformat: '%H:%M:%S' // 顯示時:分:秒
+            },
+            // 主 Y 軸 (電壓)
+            yaxis: { 
+                title: '電壓 (mV)', 
+                titlefont: { color: '#4caf50' },
+                tickfont: { color: '#4caf50' },
+                range: [targetVoltage - 1, targetVoltage + 1], // 固定範圍，讓波動清晰
+                gridcolor: '#eee'
+            },
+            // 副 Y 軸 (電流)
+            yaxis2: { 
+                title: '電流 (mA)', 
+                titlefont: { color: '#2196f3' },
+                tickfont: { color: '#2196f3' },
+                range: [targetCurrent - 1, targetCurrent + 1], // 固定範圍
+                overlaying: 'y', // 覆蓋在主 Y 軸上
+                side: 'right', // 顯示在右側
+                showgrid: false // 避免網格線重疊混亂
+            },
+            legend: { orientation: 'h', x: 0.5, y: -0.2, xanchor: 'center' } // 圖例放在下方
+        };
+
+        // 首次繪製
+        Plotly.newPlot('monitor-chart', [traceVoltage, traceCurrent], layout);
+
+
+        // --- 3. 數據更新函式 ---
         function updateMonitor() {
+            let now = new Date();
+            
             // 模擬微小的數據浮動 (讓畫面看起來像活的)
+            // 電壓 +- 0.05 mV 的隨機跳動
             let v = targetVoltage + (Math.random() - 0.5) * 0.1;
-            let c = targetCurrent + (Math.random() - 0.5) * 0.05;
+            // 電流 +- 0.03 mA 的隨機跳動
+            let c = targetCurrent + (Math.random() - 0.5) * 0.06;
+            // 氮濃度固定
             let n = targetNitrogen + (Math.random() - 0.5) * 0.02;
 
-            // 更新到網頁上
+            // --- A. 更新數據方塊 ---
             document.getElementById('v-val').innerText = v.toFixed(2) + " mV";
             document.getElementById('c-val').innerText = c.toFixed(2) + " mA";
             document.getElementById('n-val').innerText = n.toFixed(1) + " mmol/L";
-            
-            // 更新時間
-            let now = new Date();
             document.getElementById('time').innerText = "最後更新: " + now.toLocaleTimeString();
 
-            // 閃爍狀態燈
+            // --- B. 更新圖表數據 (任務 A) ---
+            updateChart(now, v, c);
+            
+            // --- C. 閃爍狀態燈 ---
             const statusLight = document.getElementById('status-light');
             statusLight.classList.add('status-active');
             setTimeout(() => statusLight.classList.remove('status-active'), 150);
         }
 
-        // 每秒更新兩次數據
+        // --- 4. 更新圖表邏輯 (任務 D) ---
+        function updateChart(time, voltage, current) {
+            const chartDiv = document.getElementById('monitor-chart');
+            
+            // 添加新數據點到 Trace 0 (電壓) 和 Trace 1 (電流)
+            Plotly.extendTraces(chartDiv, {
+                x: [[time], [time]],
+                y: [[voltage], [current]]
+            }, [0, 1]); // 更新第 0 和 1 個 Trace
+
+            // 滾動 X 軸 (保持 MAX_POINTS 個數據點)
+            let currentXArr = chartDiv.data[0].x;
+            if (currentXArr.length > MAX_POINTS) {
+                // 設定範圍為：第 (N-60) 點 到 最後一筆點
+                let range = [currentXArr[currentXArr.length - MAX_POINTS], currentXArr[currentXArr.length - 1]];
+                Plotly.relayout(chartDiv, {
+                    'xaxis.range': range
+                });
+            }
+        }
+
+        // --- 5. 設定計時器 ---
+        // 每 0.5 秒更新一次 (模擬傳感器頻率)
         setInterval(updateMonitor, 500);
-        updateMonitor(); // 初始化執行一次
+        
+        // 初始化執行一次
+        updateMonitor();
     </script>
 </body>
 </html>
